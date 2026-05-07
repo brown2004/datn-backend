@@ -1,26 +1,17 @@
 services:
   emqx:
-    image: emqx/emqx:6.2.0
+    image: emqx/emqx-enterprise:6.2.0
     container_name: emqx
-    hostname: broker.local
-    restart: unless-stopped
-    environment:
-      EMQX_NODE_NAME: emqx@broker.local
+    environment: 
+      EMQX_NODE_NAME: emqx@node1.emqx.local
     ports:
       - "1883:1883"
+      - "8883:8883"
       - "8083:8083"
       - "8084:8084"
-      - "8883:8883"
-      - "18083:18083"
+      - "127.0.0.1:18083:18083"
     volumes:
-      - emqx-data:/opt/emqx/data
-      - emqx-log:/opt/emqx/log
-    healthcheck:
-      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
-      interval: 10s
-      timeout: 25s
-      retries: 5
-
-volumes:
-  emqx-data:
-  emqx-log:
+      - ./emqx/data:/opt/emqx/data
+      - ./emqx/log:/opt/emqx/log
+    restart: unless-stopped
+            

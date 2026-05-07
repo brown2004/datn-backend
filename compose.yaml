@@ -1,6 +1,6 @@
 services:
   emqx:
-    image: emqx/emqx:6.2.0
+    image:  emqx/emqx-enterprise:6.2.0
     container_name: emqx
     hostname: broker.local
     restart: unless-stopped

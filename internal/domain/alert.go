@@ -1,0 +1,17 @@
+package domain
+
+import "time"
+
+const (
+	AlertTypeUSBRemoved     = "usb_removed"
+	AlertTypeMotionDetected = "motion_detected"
+)
+
+type Alert struct {
+	ID        string
+	AgentID   string
+	UserID    string
+	Type      string
+	Message   string
+	CreatedAt time.Time
+}

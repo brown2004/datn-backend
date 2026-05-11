@@ -1,5 +1,8 @@
 package main
 
+// chay migrations:
+// goose -dir internal/database/migrations postgres "postgres://postgres:postgres@localhost:5433/datn?sslmode=disable" up
+
 import (
 	"context"
 	"log"
@@ -11,6 +14,7 @@ import (
 	"datn-backend/internal/config"
 	"datn-backend/internal/database"
 	postgresrepo "datn-backend/internal/repo/postgres"
+	"datn-backend/internal/token"
 	"datn-backend/internal/usecase"
 )
 
@@ -30,11 +34,15 @@ func main() {
 
 	userRepo := postgresrepo.NewUserRepository(db)
 	authOTPRepo := postgresrepo.NewAuthOTPRepository(db)
-	authUseCase := usecase.NewAuthUseCase(userRepo, authOTPRepo, usecase.AuthOptions{
-		ExposeDevOTP: cfg.AppEnv != "production",
+	refreshTokenRepo := postgresrepo.NewRefreshTokenRepository(db)
+	tokenService := token.NewService(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL)
+	authUseCase := usecase.NewAuthUseCase(userRepo, authOTPRepo, refreshTokenRepo, usecase.AuthOptions{
+		ExposeDevOTP:    cfg.AppEnv != "production",
+		TokenService:    tokenService,
+		RefreshTokenTTL: cfg.RefreshTokenTTL,
 	})
 	authHandler := deliveryhttp.NewAuthHandler(authUseCase)
-	router := deliveryhttp.NewRouter(authHandler)
+	router := deliveryhttp.NewRouter(authHandler, tokenService)
 
 	addr := ":" + cfg.AppPort
 	log.Printf("health endpoint available at http://localhost%s/health", addr)

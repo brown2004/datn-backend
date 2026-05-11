@@ -13,18 +13,23 @@ import (
 
 	"datn-backend/internal/domain"
 	"datn-backend/internal/repo"
+	"datn-backend/internal/token"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrInvalidInput       = errors.New("invalid input")
-	ErrPhoneAlreadyExists = errors.New("phone number already exists")
-	ErrEmailAlreadyExists = errors.New("email already exists")
-	ErrInvalidOTP         = errors.New("invalid otp")
-	ErrOTPExpired         = errors.New("otp expired")
-	ErrOTPUsed            = errors.New("otp already used")
-	ErrOTPTooManyAttempts = errors.New("otp too many attempts")
+	ErrInvalidInput        = errors.New("invalid input")
+	ErrPhoneAlreadyExists  = errors.New("phone number already exists")
+	ErrEmailAlreadyExists  = errors.New("email already exists")
+	ErrInvalidOTP          = errors.New("invalid otp")
+	ErrOTPExpired          = errors.New("otp expired")
+	ErrOTPUsed             = errors.New("otp already used")
+	ErrOTPTooManyAttempts  = errors.New("otp too many attempts")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrInvalidRefreshToken = errors.New("invalid refresh token")
+	ErrRefreshTokenExpired = errors.New("refresh token expired")
+	ErrRefreshTokenRevoked = errors.New("refresh token revoked")
 )
 
 const (
@@ -35,9 +40,12 @@ const (
 var phoneNumberPattern = regexp.MustCompile(`^\+?[0-9]{9,15}$`)
 
 type AuthUseCase struct {
-	users        repo.UserRepository
-	otps         repo.AuthOTPRepository
-	exposeDevOTP bool
+	users           repo.UserRepository
+	otps            repo.AuthOTPRepository
+	refreshTokens   repo.RefreshTokenRepository
+	tokens          *token.Service
+	exposeDevOTP    bool
+	refreshTokenTTL time.Duration
 }
 
 type RequestRegisterOTPInput struct {
@@ -56,15 +64,51 @@ type VerifyRegisterInput struct {
 	Password    string
 }
 
-type AuthOptions struct {
-	ExposeDevOTP bool
+type LoginInput struct {
+	PhoneNumber string
+	Password    string
 }
 
-func NewAuthUseCase(users repo.UserRepository, otps repo.AuthOTPRepository, options AuthOptions) *AuthUseCase {
+type RefreshInput struct {
+	RefreshToken string
+}
+
+type LogoutInput struct {
+	RefreshToken string
+}
+
+type AuthSessionOutput struct {
+	User   *domain.User
+	Tokens AuthTokensOutput
+}
+
+type AuthTokensOutput struct {
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	ExpiresAt    time.Time
+	ExpiresIn    int64
+}
+
+type AuthOptions struct {
+	ExposeDevOTP    bool
+	TokenService    *token.Service
+	RefreshTokenTTL time.Duration
+}
+
+func NewAuthUseCase(users repo.UserRepository, otps repo.AuthOTPRepository, refreshTokens repo.RefreshTokenRepository, options AuthOptions) *AuthUseCase {
+	refreshTokenTTL := options.RefreshTokenTTL
+	if refreshTokenTTL == 0 {
+		refreshTokenTTL = 30 * 24 * time.Hour
+	}
+
 	return &AuthUseCase{
-		users:        users,
-		otps:         otps,
-		exposeDevOTP: options.ExposeDevOTP,
+		users:           users,
+		otps:            otps,
+		refreshTokens:   refreshTokens,
+		tokens:          options.TokenService,
+		exposeDevOTP:    options.ExposeDevOTP,
+		refreshTokenTTL: refreshTokenTTL,
 	}
 }
 
@@ -114,7 +158,7 @@ func (uc *AuthUseCase) RequestRegisterOTP(ctx context.Context, input RequestRegi
 	return output, nil
 }
 
-func (uc *AuthUseCase) VerifyRegister(ctx context.Context, input VerifyRegisterInput) (*domain.User, error) {
+func (uc *AuthUseCase) VerifyRegister(ctx context.Context, input VerifyRegisterInput) (*AuthSessionOutput, error) {
 	phoneNumber, err := normalizePhoneNumber(input.PhoneNumber)
 	if err != nil {
 		return nil, err
@@ -173,17 +217,123 @@ func (uc *AuthUseCase) VerifyRegister(ctx context.Context, input VerifyRegisterI
 		return nil, err
 	}
 
-	return user, nil
+	return uc.issueSession(ctx, user)
+}
+
+func (uc *AuthUseCase) Login(ctx context.Context, input LoginInput) (*AuthSessionOutput, error) {
+	phoneNumber, err := normalizePhoneNumber(input.PhoneNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.TrimSpace(input.Password) == "" {
+		return nil, ErrInvalidInput
+	}
+
+	user, err := uc.users.FindByPhoneNumber(ctx, phoneNumber)
+	if errors.Is(err, repo.ErrUserNotFound) {
+		return nil, ErrInvalidCredentials
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	return uc.issueSession(ctx, user)
+}
+
+func (uc *AuthUseCase) Refresh(ctx context.Context, input RefreshInput) (*AuthTokensOutput, error) {
+	refreshToken := strings.TrimSpace(input.RefreshToken)
+	if refreshToken == "" {
+		return nil, ErrInvalidInput
+	}
+
+	tokenHash := token.HashRefreshToken(refreshToken)
+	stored, err := uc.refreshTokens.FindByHash(ctx, tokenHash)
+	if errors.Is(err, repo.ErrRefreshTokenNotFound) {
+		return nil, ErrInvalidRefreshToken
+	}
+	if err != nil {
+		return nil, err
+	}
+	if stored.RevokedAt != nil {
+		return nil, ErrRefreshTokenRevoked
+	}
+	if time.Now().UTC().After(stored.ExpiresAt) {
+		return nil, ErrRefreshTokenExpired
+	}
+	if _, err := uc.users.FindByID(ctx, stored.UserID); err != nil {
+		if errors.Is(err, repo.ErrUserNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, err
+	}
+
+	accessToken, err := uc.tokens.IssueAccessToken(stored.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	nextRefreshToken, err := token.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = uc.refreshTokens.Replace(ctx, tokenHash, domain.RefreshToken{
+		UserID:    stored.UserID,
+		TokenHash: token.HashRefreshToken(nextRefreshToken),
+		ExpiresAt: time.Now().UTC().Add(uc.refreshTokenTTL),
+	})
+	if errors.Is(err, repo.ErrRefreshTokenNotFound) {
+		return nil, ErrInvalidRefreshToken
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthTokensOutput{
+		AccessToken:  accessToken.Token,
+		RefreshToken: nextRefreshToken,
+		TokenType:    "Bearer",
+		ExpiresAt:    accessToken.ExpiresAt,
+		ExpiresIn:    int64(time.Until(accessToken.ExpiresAt).Seconds()),
+	}, nil
+}
+
+func (uc *AuthUseCase) Logout(ctx context.Context, input LogoutInput) error {
+	refreshToken := strings.TrimSpace(input.RefreshToken)
+	if refreshToken == "" {
+		return ErrInvalidInput
+	}
+
+	err := uc.refreshTokens.RevokeByHash(ctx, token.HashRefreshToken(refreshToken))
+	if errors.Is(err, repo.ErrRefreshTokenNotFound) {
+		return ErrInvalidRefreshToken
+	}
+
+	return err
+}
+
+func (uc *AuthUseCase) LogoutAll(ctx context.Context, userID string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ErrInvalidInput
+	}
+
+	return uc.refreshTokens.RevokeAllByUserID(ctx, userID)
 }
 
 func (uc *AuthUseCase) LinkEmail(ctx context.Context, userID string, email string) (*domain.User, error) {
 	userID = strings.TrimSpace(userID)
-	email = strings.TrimSpace(strings.ToLower(email))
+	email, err := normalizeEmail(email)
+	if err != nil {
+		return nil, err
+	}
 
 	if userID == "" || email == "" {
-		return nil, ErrInvalidInput
-	}
-	if _, err := mail.ParseAddress(email); err != nil {
 		return nil, ErrInvalidInput
 	}
 
@@ -198,15 +348,60 @@ func (uc *AuthUseCase) LinkEmail(ctx context.Context, userID string, email strin
 	return uc.users.UpdateEmail(ctx, userID, email)
 }
 
+func (uc *AuthUseCase) issueSession(ctx context.Context, user *domain.User) (*AuthSessionOutput, error) {
+	accessToken, err := uc.tokens.IssueAccessToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := token.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := uc.refreshTokens.Create(ctx, domain.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: token.HashRefreshToken(refreshToken),
+		ExpiresAt: time.Now().UTC().Add(uc.refreshTokenTTL),
+	}); err != nil {
+		return nil, err
+	}
+
+	return &AuthSessionOutput{
+		User: user,
+		Tokens: AuthTokensOutput{
+			AccessToken:  accessToken.Token,
+			RefreshToken: refreshToken,
+			TokenType:    "Bearer",
+			ExpiresAt:    accessToken.ExpiresAt,
+			ExpiresIn:    int64(time.Until(accessToken.ExpiresAt).Seconds()),
+		},
+	}, nil
+}
+
 func normalizePhoneNumber(phoneNumber string) (string, error) {
 	phoneNumber = strings.TrimSpace(phoneNumber)
-	phoneNumber = strings.NewReplacer(" ", "", "-", "", ".", "", "(", "", ")").Replace(phoneNumber)
+	phoneNumber = strings.NewReplacer(" ", "", "-", "", ".", "", "(", "", ")", "").Replace(phoneNumber)
 
 	if !phoneNumberPattern.MatchString(phoneNumber) {
 		return "", ErrInvalidInput
 	}
 
 	return phoneNumber, nil
+}
+
+func normalizeEmail(email string) (string, error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" {
+		return "", ErrInvalidInput
+	}
+
+	parsed, err := mail.ParseAddress(email)
+	if err != nil || parsed.Address == "" {
+		return "", ErrInvalidInput
+	}
+
+	return parsed.Address, nil
 }
 
 func generateOTPCode() (string, error) {

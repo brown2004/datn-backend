@@ -43,51 +43,10 @@ type AuthUseCase struct {
 	users           repo.UserRepository
 	otps            repo.AuthOTPRepository
 	refreshTokens   repo.RefreshTokenRepository
+	registrations   repo.RegistrationRepository
 	tokens          *token.Service
 	exposeDevOTP    bool
 	refreshTokenTTL time.Duration
-}
-
-type RequestRegisterOTPInput struct {
-	PhoneNumber string
-}
-
-type RequestRegisterOTPOutput struct {
-	ExpiresAt time.Time
-	DevOTP    *string
-}
-
-type VerifyRegisterInput struct {
-	PhoneNumber string
-	OTP         string
-	FullName    string
-	Password    string
-}
-
-type LoginInput struct {
-	PhoneNumber string
-	Password    string
-}
-
-type RefreshInput struct {
-	RefreshToken string
-}
-
-type LogoutInput struct {
-	RefreshToken string
-}
-
-type AuthSessionOutput struct {
-	User   *domain.User
-	Tokens AuthTokensOutput
-}
-
-type AuthTokensOutput struct {
-	AccessToken  string
-	RefreshToken string
-	TokenType    string
-	ExpiresAt    time.Time
-	ExpiresIn    int64
 }
 
 type AuthOptions struct {
@@ -96,7 +55,7 @@ type AuthOptions struct {
 	RefreshTokenTTL time.Duration
 }
 
-func NewAuthUseCase(users repo.UserRepository, otps repo.AuthOTPRepository, refreshTokens repo.RefreshTokenRepository, options AuthOptions) *AuthUseCase {
+func NewAuthUseCase(users repo.UserRepository, otps repo.AuthOTPRepository, refreshTokens repo.RefreshTokenRepository, registrations repo.RegistrationRepository, options AuthOptions) *AuthUseCase {
 	refreshTokenTTL := options.RefreshTokenTTL
 	if refreshTokenTTL == 0 {
 		refreshTokenTTL = 30 * 24 * time.Hour
@@ -106,13 +65,14 @@ func NewAuthUseCase(users repo.UserRepository, otps repo.AuthOTPRepository, refr
 		users:           users,
 		otps:            otps,
 		refreshTokens:   refreshTokens,
+		registrations:   registrations,
 		tokens:          options.TokenService,
 		exposeDevOTP:    options.ExposeDevOTP,
 		refreshTokenTTL: refreshTokenTTL,
 	}
 }
 
-func (uc *AuthUseCase) RequestRegisterOTP(ctx context.Context, input RequestRegisterOTPInput) (*RequestRegisterOTPOutput, error) {
+func (uc *AuthUseCase) RequestRegisterOTP(ctx context.Context, input domain.RequestRegisterOTPInput) (*domain.RegisterOTPChallenge, error) {
 	phoneNumber, err := normalizePhoneNumber(input.PhoneNumber)
 	if err != nil {
 		return nil, err
@@ -148,7 +108,7 @@ func (uc *AuthUseCase) RequestRegisterOTP(ctx context.Context, input RequestRegi
 		return nil, err
 	}
 
-	output := &RequestRegisterOTPOutput{
+	output := &domain.RegisterOTPChallenge{
 		ExpiresAt: otp.ExpiresAt,
 	}
 	if uc.exposeDevOTP {
@@ -158,16 +118,15 @@ func (uc *AuthUseCase) RequestRegisterOTP(ctx context.Context, input RequestRegi
 	return output, nil
 }
 
-func (uc *AuthUseCase) VerifyRegister(ctx context.Context, input VerifyRegisterInput) (*AuthSessionOutput, error) {
+func (uc *AuthUseCase) VerifyRegisterOTP(ctx context.Context, input domain.VerifyRegisterOTPInput) (*domain.RegisterOTPVerification, error) {
 	phoneNumber, err := normalizePhoneNumber(input.PhoneNumber)
 	if err != nil {
 		return nil, err
 	}
 
 	otpCode := strings.TrimSpace(input.OTP)
-	fullName := strings.TrimSpace(input.FullName)
 
-	if !isValidOTPCode(otpCode) || fullName == "" || len(input.Password) < 8 {
+	if !isValidOTPCode(otpCode) {
 		return nil, ErrInvalidInput
 	}
 
@@ -199,16 +158,7 @@ func (uc *AuthUseCase) VerifyRegister(ctx context.Context, input VerifyRegisterI
 		return nil, ErrInvalidOTP
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := uc.users.Create(ctx, domain.User{
-		PhoneNumber:  phoneNumber,
-		FullName:     fullName,
-		PasswordHash: string(passwordHash),
-	})
+	registerToken, err := uc.tokens.IssueRegisterToken(phoneNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -217,10 +167,76 @@ func (uc *AuthUseCase) VerifyRegister(ctx context.Context, input VerifyRegisterI
 		return nil, err
 	}
 
-	return uc.issueSession(ctx, user)
+	return &domain.RegisterOTPVerification{
+		AccessToken: registerToken.Token,
+		TokenType:   "Bearer",
+		ExpiresAt:   registerToken.ExpiresAt,
+		ExpiresIn:   int64(time.Until(registerToken.ExpiresAt).Seconds()),
+	}, nil
 }
 
-func (uc *AuthUseCase) Login(ctx context.Context, input LoginInput) (*AuthSessionOutput, error) {
+func (uc *AuthUseCase) CompleteRegister(ctx context.Context, phoneNumber string, input domain.CompleteRegisterInput) (*domain.AuthSession, error) {
+	phoneNumber, err := normalizePhoneNumber(phoneNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	fullName := strings.TrimSpace(input.FullName)
+	if fullName == "" || len(input.Password) < 8 {
+		return nil, ErrInvalidInput
+	}
+
+	existing, err := uc.users.FindByPhoneNumber(ctx, phoneNumber)
+	if err != nil && !errors.Is(err, repo.ErrUserNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, ErrPhoneAlreadyExists
+	}
+
+	refreshToken, err := token.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := uc.registrations.CompleteRegister(ctx, domain.User{
+		PhoneNumber:  phoneNumber,
+		FullName:     fullName,
+		PasswordHash: string(passwordHash),
+	}, domain.RefreshToken{
+		TokenHash: token.HashRefreshToken(refreshToken),
+		ExpiresAt: time.Now().UTC().Add(uc.refreshTokenTTL),
+	})
+	if errors.Is(err, repo.ErrUserAlreadyExists) {
+		return nil, ErrPhoneAlreadyExists
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := uc.tokens.IssueAccessToken(user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.AuthSession{
+		User: user,
+		Tokens: domain.AuthTokens{
+			AccessToken:  accessToken.Token,
+			RefreshToken: refreshToken,
+			TokenType:    "Bearer",
+			ExpiresAt:    accessToken.ExpiresAt,
+			ExpiresIn:    int64(time.Until(accessToken.ExpiresAt).Seconds()),
+		},
+	}, nil
+}
+
+func (uc *AuthUseCase) Login(ctx context.Context, input domain.LoginInput) (*domain.AuthSession, error) {
 	phoneNumber, err := normalizePhoneNumber(input.PhoneNumber)
 	if err != nil {
 		return nil, err
@@ -245,7 +261,7 @@ func (uc *AuthUseCase) Login(ctx context.Context, input LoginInput) (*AuthSessio
 	return uc.issueSession(ctx, user)
 }
 
-func (uc *AuthUseCase) Refresh(ctx context.Context, input RefreshInput) (*AuthTokensOutput, error) {
+func (uc *AuthUseCase) Refresh(ctx context.Context, input domain.RefreshInput) (*domain.AuthTokens, error) {
 	refreshToken := strings.TrimSpace(input.RefreshToken)
 	if refreshToken == "" {
 		return nil, ErrInvalidInput
@@ -294,7 +310,7 @@ func (uc *AuthUseCase) Refresh(ctx context.Context, input RefreshInput) (*AuthTo
 		return nil, err
 	}
 
-	return &AuthTokensOutput{
+	return &domain.AuthTokens{
 		AccessToken:  accessToken.Token,
 		RefreshToken: nextRefreshToken,
 		TokenType:    "Bearer",
@@ -303,7 +319,7 @@ func (uc *AuthUseCase) Refresh(ctx context.Context, input RefreshInput) (*AuthTo
 	}, nil
 }
 
-func (uc *AuthUseCase) Logout(ctx context.Context, input LogoutInput) error {
+func (uc *AuthUseCase) Logout(ctx context.Context, input domain.LogoutInput) error {
 	refreshToken := strings.TrimSpace(input.RefreshToken)
 	if refreshToken == "" {
 		return ErrInvalidInput
@@ -348,7 +364,7 @@ func (uc *AuthUseCase) LinkEmail(ctx context.Context, userID string, email strin
 	return uc.users.UpdateEmail(ctx, userID, email)
 }
 
-func (uc *AuthUseCase) issueSession(ctx context.Context, user *domain.User) (*AuthSessionOutput, error) {
+func (uc *AuthUseCase) issueSession(ctx context.Context, user *domain.User) (*domain.AuthSession, error) {
 	accessToken, err := uc.tokens.IssueAccessToken(user.ID)
 	if err != nil {
 		return nil, err
@@ -367,9 +383,9 @@ func (uc *AuthUseCase) issueSession(ctx context.Context, user *domain.User) (*Au
 		return nil, err
 	}
 
-	return &AuthSessionOutput{
+	return &domain.AuthSession{
 		User: user,
-		Tokens: AuthTokensOutput{
+		Tokens: domain.AuthTokens{
 			AccessToken:  accessToken.Token,
 			RefreshToken: refreshToken,
 			TokenType:    "Bearer",

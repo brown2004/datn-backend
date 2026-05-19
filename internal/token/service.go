@@ -14,6 +14,11 @@ import (
 
 var ErrInvalidToken = errors.New("invalid token")
 
+const (
+	TokenTypeAccess   = "access"
+	TokenTypeRegister = "register"
+)
+
 type Service struct {
 	secret    []byte
 	issuer    string
@@ -41,14 +46,22 @@ func NewService(secret string, issuer string, audience string, accessTTL time.Du
 }
 
 func (s *Service) IssueAccessToken(userID string) (*AccessToken, error) {
+	return s.issueToken(userID, TokenTypeAccess)
+}
+
+func (s *Service) IssueRegisterToken(phoneNumber string) (*AccessToken, error) {
+	return s.issueToken(phoneNumber, TokenTypeRegister)
+}
+
+func (s *Service) issueToken(subject string, tokenType string) (*AccessToken, error) {
 	now := time.Now().UTC()
 	expiresAt := now.Add(s.accessTTL)
 
 	claims := AccessClaims{
-		TokenType: "access",
+		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
-			Subject:   userID,
+			Subject:   subject,
 			Audience:  jwt.ClaimStrings{s.audience},
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			NotBefore: jwt.NewNumericDate(now),
@@ -69,6 +82,14 @@ func (s *Service) IssueAccessToken(userID string) (*AccessToken, error) {
 }
 
 func (s *Service) VerifyAccessToken(rawToken string) (*AccessClaims, error) {
+	return s.verifyToken(rawToken, TokenTypeAccess)
+}
+
+func (s *Service) VerifyRegisterToken(rawToken string) (*AccessClaims, error) {
+	return s.verifyToken(rawToken, TokenTypeRegister)
+}
+
+func (s *Service) verifyToken(rawToken string, tokenType string) (*AccessClaims, error) {
 	claims := &AccessClaims{}
 	parser := jwt.NewParser(
 		jwt.WithAudience(s.audience),
@@ -79,7 +100,7 @@ func (s *Service) VerifyAccessToken(rawToken string) (*AccessClaims, error) {
 	parsed, err := parser.ParseWithClaims(rawToken, claims, func(token *jwt.Token) (any, error) {
 		return s.secret, nil
 	})
-	if err != nil || !parsed.Valid || claims.TokenType != "access" || claims.Subject == "" {
+	if err != nil || !parsed.Valid || claims.TokenType != tokenType || claims.Subject == "" {
 		return nil, ErrInvalidToken
 	}
 

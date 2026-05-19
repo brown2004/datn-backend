@@ -27,6 +27,40 @@ func TestServiceIssueAndVerifyAccessToken(t *testing.T) {
 	}
 }
 
+func TestServiceIssueAndVerifyRegisterToken(t *testing.T) {
+	service := NewService("test-secret", "datn-backend", "datn-api", 15*time.Minute)
+
+	registerToken, err := service.IssueRegisterToken("0962143076")
+	if err != nil {
+		t.Fatalf("IssueRegisterToken returned error: %v", err)
+	}
+
+	claims, err := service.VerifyRegisterToken(registerToken.Token)
+	if err != nil {
+		t.Fatalf("VerifyRegisterToken returned error: %v", err)
+	}
+
+	if claims.Subject != "0962143076" {
+		t.Fatalf("expected subject 0962143076, got %q", claims.Subject)
+	}
+	if claims.TokenType != TokenTypeRegister {
+		t.Fatalf("expected token type register, got %q", claims.TokenType)
+	}
+}
+
+func TestServiceVerifyAccessTokenRejectsRegisterToken(t *testing.T) {
+	service := NewService("test-secret", "datn-backend", "datn-api", 15*time.Minute)
+
+	registerToken, err := service.IssueRegisterToken("0962143076")
+	if err != nil {
+		t.Fatalf("IssueRegisterToken returned error: %v", err)
+	}
+
+	if _, err := service.VerifyAccessToken(registerToken.Token); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("expected ErrInvalidToken, got %v", err)
+	}
+}
+
 func TestServiceVerifyAccessTokenRejectsWrongAudience(t *testing.T) {
 	issuer := NewService("test-secret", "datn-backend", "datn-api", 15*time.Minute)
 	verifier := NewService("test-secret", "datn-backend", "other-api", 15*time.Minute)

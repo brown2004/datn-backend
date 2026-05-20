@@ -14,11 +14,10 @@ type PCAgent struct {
 	ID               string
 	UserID           string
 	DeviceName       string
-	DeviceCode       string
 	OSType           string
+	AgentSecretHash  *string
 	Status           string
 	ProtectionStatus string
 	LastSeenAt       *time.Time
 	CreatedAt        time.Time
-	UpdatedAt        time.Time
 }

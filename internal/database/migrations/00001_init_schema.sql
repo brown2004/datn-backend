@@ -15,13 +15,14 @@ CREATE TABLE IF NOT EXISTS pc_agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_name VARCHAR(255) NOT NULL,
-    device_code VARCHAR(100) NOT NULL UNIQUE,
     os_type VARCHAR(50) NOT NULL,
+    agent_secret_hash TEXT,
     agent_status VARCHAR(20) NOT NULL DEFAULT 'offline'
         CHECK (agent_status IN ('online', 'offline')),
     protection_status VARCHAR(20) NOT NULL DEFAULT 'disabled'
         CHECK (protection_status IN ('enabled', 'disabled')),
-    last_seen_at TIMESTAMPTZ
+    last_seen_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS alerts (

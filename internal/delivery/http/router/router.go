@@ -7,7 +7,12 @@ import (
 	"datn-backend/internal/token"
 )
 
-func NewRouter(authHandler *deliveryhttp.AuthHandler, featureHandler *deliveryhttp.FeatureHandler, tokenService *token.Service) http.Handler {
+func NewRouter(
+	authHandler *deliveryhttp.AuthHandler,
+	pcAgentHandler *deliveryhttp.PCAgentHandler,
+	mobileDeviceHandler *deliveryhttp.MobileDeviceHandler,
+	tokenService *token.Service,
+) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +22,8 @@ func NewRouter(authHandler *deliveryhttp.AuthHandler, featureHandler *deliveryht
 	})
 
 	registerAuthRoutes(mux, authHandler, tokenService)
-	registerFeatureRoutes(mux, featureHandler, tokenService)
+	registerPCAgentRoutes(mux, pcAgentHandler, tokenService)
+	registerMobileDeviceRoutes(mux, mobileDeviceHandler, tokenService)
 
 	return mux
 }
@@ -33,8 +39,16 @@ func registerAuthRoutes(mux *http.ServeMux, authHandler *deliveryhttp.AuthHandle
 	mux.Handle("POST /api/auth/link-email", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(authHandler.HandleLinkEmail)))
 }
 
-func registerFeatureRoutes(mux *http.ServeMux, featureHandler *deliveryhttp.FeatureHandler, tokenService *token.Service) {
-	mux.Handle("POST /api/features/devices/mobile", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(featureHandler.HandleRegisterMobileDevice)))
-	mux.Handle("POST /api/features/devices/pc-agents/link", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(featureHandler.HandleLinkPCAgent)))
-	mux.Handle("GET /api/features/devices/pc-agents", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(featureHandler.HandleListPCAgents)))
+func registerPCAgentRoutes(mux *http.ServeMux, handler *deliveryhttp.PCAgentHandler, tokenService *token.Service) {
+	mux.HandleFunc("POST /api/pc-agents/pairing/start", handler.HandleStartPairing)
+	mux.HandleFunc("GET /api/pc-agents/pairing/status", handler.HandleGetPairingStatus)
+	mux.HandleFunc("POST /api/pc-agents/verify", handler.HandleVerify)
+	mux.Handle("POST /api/pc-agents/pairing/confirm", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleConfirmPairing)))
+	mux.Handle("GET /api/pc-agents", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleList)))
+	mux.Handle("DELETE /api/pc-agents/{pc_agent_id}", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleDelete)))
+	mux.Handle("PATCH /api/pc-agents/{pc_agent_id}/protection", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleUpdateProtection)))
+}
+
+func registerMobileDeviceRoutes(mux *http.ServeMux, handler *deliveryhttp.MobileDeviceHandler, tokenService *token.Service) {
+	mux.Handle("POST /api/mobile-devices", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleRegister)))
 }

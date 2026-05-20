@@ -1,5 +1,7 @@
 package main
 
+// goose:
+// goose -dir internal/database/migrations postgres "postgres://postgres:postgres@localhost:5433/datn?sslmode=disable" up
 import (
 	"context"
 	"log"
@@ -44,16 +46,18 @@ func main() {
 	registrationRepo := postgresrepo.NewRegistrationRepository(db)
 	pcAgentRepo := postgresrepo.NewPCAgentRepository(db)
 	mobileDeviceRepo := postgresrepo.NewMobileDeviceRepository(db)
+	pairingSessionRepo := postgresrepo.NewPairingSessionRepository(db)
 	tokenService := token.NewService(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL)
 	authUseCase := usecase.NewAuthUseCase(userRepo, authOTPRepo, refreshTokenRepo, registrationRepo, usecase.AuthOptions{
 		ExposeDevOTP:    cfg.AppEnv != "production",
 		TokenService:    tokenService,
 		RefreshTokenTTL: cfg.RefreshTokenTTL,
 	})
-	deviceLinkUseCase := usecase.NewDeviceLinkUseCase(pcAgentRepo, mobileDeviceRepo)
+	pairingUseCase := usecase.NewPairingUseCase(pcAgentRepo, mobileDeviceRepo, pairingSessionRepo)
 	authHandler := deliveryhttp.NewAuthHandler(authUseCase)
-	featureHandler := deliveryhttp.NewFeatureHandler(deviceLinkUseCase)
-	router := httprouter.NewRouter(authHandler, featureHandler, tokenService)
+	pcAgentHandler := deliveryhttp.NewPCAgentHandler(pairingUseCase)
+	mobileDeviceHandler := deliveryhttp.NewMobileDeviceHandler(pairingUseCase)
+	router := httprouter.NewRouter(authHandler, pcAgentHandler, mobileDeviceHandler, tokenService)
 
 	addr := ":" + cfg.AppPort
 	server := &http.Server{

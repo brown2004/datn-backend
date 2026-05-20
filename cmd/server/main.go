@@ -12,9 +12,15 @@ import (
 	"datn-backend/internal/database"
 	postgresrepo "datn-backend/internal/repo/postgres"
 	"datn-backend/internal/usecase"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("warning: could not load .env file: %v", err)
+	}
+
 	log.Println("backend starting...")
 
 	cfg := config.Load()

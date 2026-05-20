@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"datn-backend/internal/domain"
 	"datn-backend/internal/repo"
@@ -19,34 +20,26 @@ func NewPCAgentRepository(db *sql.DB) *PCAgentRepository {
 
 func (r *PCAgentRepository) Create(ctx context.Context, agent domain.PCAgent) (*domain.PCAgent, error) {
 	const query = `
-		INSERT INTO pc_agents (user_id, device_name, device_code, os_type, agent_status, protection_status)
+		INSERT INTO pc_agents (user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, user_id, device_name, device_code, os_type, agent_status, protection_status, last_seen_at
+		RETURNING id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
 	`
 
-	created, err := scanPCAgent(r.db.QueryRowContext(
+	return scanPCAgent(r.db.QueryRowContext(
 		ctx,
 		query,
 		agent.UserID,
 		agent.DeviceName,
-		agent.DeviceCode,
 		agent.OSType,
+		agent.AgentSecretHash,
 		agent.Status,
 		agent.ProtectionStatus,
 	))
-	if err != nil {
-		if isUniqueViolation(err) {
-			return nil, repo.ErrPCAgentAlreadyLinked
-		}
-		return nil, err
-	}
-
-	return created, nil
 }
 
 func (r *PCAgentRepository) FindByID(ctx context.Context, id string) (*domain.PCAgent, error) {
 	const query = `
-		SELECT id, user_id, device_name, device_code, os_type, agent_status, protection_status, last_seen_at
+		SELECT id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
 		FROM pc_agents
 		WHERE id = $1
 	`
@@ -56,7 +49,7 @@ func (r *PCAgentRepository) FindByID(ctx context.Context, id string) (*domain.PC
 
 func (r *PCAgentRepository) FindByUserID(ctx context.Context, userID string) ([]domain.PCAgent, error) {
 	const query = `
-		SELECT id, user_id, device_name, device_code, os_type, agent_status, protection_status, last_seen_at
+		SELECT id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
 		FROM pc_agents
 		WHERE user_id = $1
 		ORDER BY device_name ASC
@@ -81,6 +74,75 @@ func (r *PCAgentRepository) FindByUserID(ctx context.Context, userID string) ([]
 	}
 
 	return agents, nil
+}
+
+func (r *PCAgentRepository) SetAgentSecretHashIfEmpty(ctx context.Context, id string, secretHash string) (*domain.PCAgent, bool, error) {
+	const query = `
+		UPDATE pc_agents
+		SET agent_secret_hash = $2
+		WHERE id = $1 AND agent_secret_hash IS NULL
+		RETURNING id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
+	`
+
+	agent, err := scanPCAgent(r.db.QueryRowContext(ctx, query, id, secretHash))
+	if err == nil {
+		return agent, true, nil
+	}
+	if !errors.Is(err, repo.ErrPCAgentNotFound) {
+		return nil, false, err
+	}
+
+	agent, err = r.FindByID(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return agent, false, nil
+}
+
+func (r *PCAgentRepository) MarkVerified(ctx context.Context, id string, verifiedAt time.Time) (*domain.PCAgent, error) {
+	const query = `
+		UPDATE pc_agents
+		SET agent_status = $2,
+			last_seen_at = $3
+		WHERE id = $1
+		RETURNING id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
+	`
+
+	return scanPCAgent(r.db.QueryRowContext(ctx, query, id, domain.AgentStatusOnline, verifiedAt))
+}
+
+func (r *PCAgentRepository) UpdateProtectionStatusByIDAndUserID(ctx context.Context, id string, userID string, protectionStatus string) (*domain.PCAgent, error) {
+	const query = `
+		UPDATE pc_agents
+		SET protection_status = $3
+		WHERE id = $1 AND user_id = $2
+		RETURNING id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
+	`
+
+	return scanPCAgent(r.db.QueryRowContext(ctx, query, id, userID, protectionStatus))
+}
+
+func (r *PCAgentRepository) DeleteByIDAndUserID(ctx context.Context, id string, userID string) error {
+	const query = `
+		DELETE FROM pc_agents
+		WHERE id = $1 AND user_id = $2
+	`
+
+	result, err := r.db.ExecContext(ctx, query, id, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return repo.ErrPCAgentNotFound
+	}
+
+	return nil
 }
 
 func (r *PCAgentRepository) Save(ctx context.Context, agent *domain.PCAgent) error {
@@ -115,17 +177,19 @@ type pcAgentRow interface {
 
 func scanPCAgent(row pcAgentRow) (*domain.PCAgent, error) {
 	var agent domain.PCAgent
+	var agentSecretHash sql.NullString
 	var lastSeenAt sql.NullTime
 
 	if err := row.Scan(
 		&agent.ID,
 		&agent.UserID,
 		&agent.DeviceName,
-		&agent.DeviceCode,
 		&agent.OSType,
+		&agentSecretHash,
 		&agent.Status,
 		&agent.ProtectionStatus,
 		&lastSeenAt,
+		&agent.CreatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, repo.ErrPCAgentNotFound
@@ -133,6 +197,9 @@ func scanPCAgent(row pcAgentRow) (*domain.PCAgent, error) {
 		return nil, err
 	}
 
+	if agentSecretHash.Valid {
+		agent.AgentSecretHash = &agentSecretHash.String
+	}
 	if lastSeenAt.Valid {
 		agent.LastSeenAt = &lastSeenAt.Time
 	}

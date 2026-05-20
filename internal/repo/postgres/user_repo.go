@@ -69,6 +69,10 @@ func (r *UserRepository) UpdateEmail(ctx context.Context, userID string, email s
 }
 
 func (r *UserRepository) scanUser(row *sql.Row) (*domain.User, error) {
+	return scanUser(row)
+}
+
+func scanUser(row *sql.Row) (*domain.User, error) {
 	var user domain.User
 	var email sql.NullString
 	var lastLoginAt sql.NullTime

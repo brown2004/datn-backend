@@ -2,11 +2,11 @@ package domain
 
 import "time"
 
-type MobileDevice struct {
+type RefreshToken struct {
 	ID        string
 	UserID    string
-	FCMToken  string
-	Platform  string
+	TokenHash string
+	ExpiresAt time.Time
+	RevokedAt *time.Time
 	CreatedAt time.Time
-	UpdatedAt time.Time
 }

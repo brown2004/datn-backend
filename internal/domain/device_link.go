@@ -1,7 +1,6 @@
 package domain
 
 type StartPCAgentPairingInput struct {
-	PCAgentID  string
 	DeviceName string
 	OSType     string
 }

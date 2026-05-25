@@ -23,7 +23,7 @@
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| POST | `/api/pc-agents/pairing/start` | Public | PC-agent creates a pairing code |
+| POST | `/api/pc-agents/pairing/start` | Public | PC-agent creates a backend-issued `pc_agent_id` and pairing code |
 | GET | `/api/pc-agents/pairing/status?pairing_session_id=<id>&device_code=<code>` | Public | PC-agent checks pairing status and receives credential once confirmed |
 | POST | `/api/pc-agents/verify` | Agent credential | PC-agent verifies with `pc_agent_id` and `agent_secret` |
 | PATCH | `/api/pc-agents/me/protection` | Agent credential | PC-agent enables or disables its own protection mode |

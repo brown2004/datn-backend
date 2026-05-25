@@ -188,12 +188,13 @@ type pcAgentRow interface {
 
 func scanPCAgent(row pcAgentRow) (*domain.PCAgent, error) {
 	var agent domain.PCAgent
+	var userID sql.NullString
 	var agentSecretHash sql.NullString
 	var lastSeenAt sql.NullTime
 
 	if err := row.Scan(
 		&agent.ID,
-		&agent.UserID,
+		&userID,
 		&agent.DeviceName,
 		&agent.OSType,
 		&agentSecretHash,
@@ -208,6 +209,9 @@ func scanPCAgent(row pcAgentRow) (*domain.PCAgent, error) {
 		return nil, err
 	}
 
+	if userID.Valid {
+		agent.UserID = userID.String
+	}
 	if agentSecretHash.Valid {
 		agent.AgentSecretHash = &agentSecretHash.String
 	}

@@ -112,17 +112,6 @@ func (r *PCAgentRepository) MarkVerified(ctx context.Context, id string, verifie
 	return scanPCAgent(r.db.QueryRowContext(ctx, query, id, domain.AgentStatusOnline, verifiedAt))
 }
 
-func (r *PCAgentRepository) UpdateProtectionStatusByID(ctx context.Context, id string, protectionStatus string) (*domain.PCAgent, error) {
-	const query = `
-		UPDATE pc_agents
-		SET protection_status = $2
-		WHERE id = $1
-		RETURNING id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
-	`
-
-	return scanPCAgent(r.db.QueryRowContext(ctx, query, id, protectionStatus))
-}
-
 func (r *PCAgentRepository) UpdateProtectionStatusByIDAndUserID(ctx context.Context, id string, userID string, protectionStatus string) (*domain.PCAgent, error) {
 	const query = `
 		UPDATE pc_agents

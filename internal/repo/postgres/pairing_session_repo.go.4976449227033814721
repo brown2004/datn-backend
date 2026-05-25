@@ -19,11 +19,6 @@ func NewPairingSessionRepository(db *sql.DB) *PairingSessionRepository {
 }
 
 func (r *PairingSessionRepository) Create(ctx context.Context, session domain.PairingSession) (*domain.PairingSession, error) {
-	requestedPCAgentID := sql.NullString{}
-	if session.RequestedPCAgentID != nil && *session.RequestedPCAgentID != "" {
-		requestedPCAgentID = sql.NullString{String: *session.RequestedPCAgentID, Valid: true}
-	}
-
 	const query = `
 		INSERT INTO pairing_sessions (device_code, requested_pc_agent_id, device_name, os_type, status, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -35,7 +30,7 @@ func (r *PairingSessionRepository) Create(ctx context.Context, session domain.Pa
 		ctx,
 		query,
 		session.DeviceCode,
-		requestedPCAgentID,
+		session.RequestedPCAgentID,
 		session.DeviceName,
 		session.OSType,
 		session.Status,

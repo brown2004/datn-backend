@@ -19,7 +19,6 @@ func NewPCAgentHandler(pairing *usecase.PairingUseCase) *PCAgentHandler {
 
 func (h *PCAgentHandler) HandleStartPairing(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PCAgentID  string `json:"pc_agent_id"`
 		DeviceName string `json:"device_name"`
 		OSType     string `json:"os_type"`
 	}
@@ -28,7 +27,6 @@ func (h *PCAgentHandler) HandleStartPairing(w http.ResponseWriter, r *http.Reque
 	}
 
 	session, err := h.pairing.StartPairing(r.Context(), domain.StartPCAgentPairingInput{
-		PCAgentID:  req.PCAgentID,
 		DeviceName: req.DeviceName,
 		OSType:     req.OSType,
 	})
@@ -240,34 +238,6 @@ func (h *PCAgentHandler) HandleUpdateProtection(w http.ResponseWriter, r *http.R
 			writeError(w, http.StatusBadRequest, "invalid_input")
 		case errors.Is(err, usecase.ErrPCAgentNotFound):
 			writeError(w, http.StatusNotFound, "pc_agent_not_found")
-		default:
-			writeInternalError(w, err)
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, toPCAgentResponse(agent))
-}
-
-func (h *PCAgentHandler) HandleUpdateOwnProtection(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		PCAgentID   string `json:"pc_agent_id"`
-		AgentSecret string `json:"agent_secret"`
-		Enabled     bool   `json:"enabled"`
-	}
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-
-	agent, err := h.pairing.UpdatePCAgentOwnProtection(r.Context(), domain.UpdatePCAgentOwnProtectionInput{
-		PCAgentID:   req.PCAgentID,
-		AgentSecret: req.AgentSecret,
-		Enabled:     req.Enabled,
-	})
-	if err != nil {
-		switch {
-		case errors.Is(err, usecase.ErrAgentCredentialInvalid):
-			writeMessageError(w, http.StatusUnauthorized, "ThĂ´ng tin xĂ¡c thá»±c thiáº¿t bá»‹ khĂ´ng há»£p lá»‡")
 		default:
 			writeInternalError(w, err)
 		}

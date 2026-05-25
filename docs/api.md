@@ -26,6 +26,7 @@
 | POST | `/api/pc-agents/pairing/start` | Public | PC-agent creates a pairing code |
 | GET | `/api/pc-agents/pairing/status?pairing_session_id=<id>&device_code=<code>` | Public | PC-agent checks pairing status and receives credential once confirmed |
 | POST | `/api/pc-agents/verify` | Agent credential | PC-agent verifies with `pc_agent_id` and `agent_secret` |
+| PATCH | `/api/pc-agents/me/protection` | Agent credential | PC-agent enables or disables its own protection mode |
 | POST | `/api/pc-agents/pairing/confirm` | JWT | User confirms a pairing code |
 | GET | `/api/pc-agents` | JWT | List current user's linked PC agents |
 | DELETE | `/api/pc-agents/{pc_agent_id}` | JWT | Unlink a PC agent owned by current user |
@@ -35,6 +36,8 @@
 
 ```json
 {
+  "pc_agent_id": "agent-id",
+  "agent_secret": "agent-secret",
   "enabled": true
 }
 ```

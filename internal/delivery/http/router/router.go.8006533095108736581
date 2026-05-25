@@ -43,7 +43,6 @@ func registerPCAgentRoutes(mux *http.ServeMux, handler *deliveryhttp.PCAgentHand
 	mux.HandleFunc("POST /api/pc-agents/pairing/start", handler.HandleStartPairing)
 	mux.HandleFunc("GET /api/pc-agents/pairing/status", handler.HandleGetPairingStatus)
 	mux.HandleFunc("POST /api/pc-agents/verify", handler.HandleVerify)
-	mux.HandleFunc("PATCH /api/pc-agents/me/protection", handler.HandleUpdateOwnProtection)
 	mux.Handle("POST /api/pc-agents/pairing/confirm", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleConfirmPairing)))
 	mux.Handle("GET /api/pc-agents", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleList)))
 	mux.Handle("DELETE /api/pc-agents/{pc_agent_id}", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleDelete)))

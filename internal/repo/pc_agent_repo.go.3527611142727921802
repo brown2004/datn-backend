@@ -16,7 +16,6 @@ type PCAgentRepository interface {
 	FindByUserID(ctx context.Context, userID string) ([]domain.PCAgent, error)
 	SetAgentSecretHashIfEmpty(ctx context.Context, id string, secretHash string) (*domain.PCAgent, bool, error)
 	MarkVerified(ctx context.Context, id string, verifiedAt time.Time) (*domain.PCAgent, error)
-	UpdateProtectionStatusByID(ctx context.Context, id string, protectionStatus string) (*domain.PCAgent, error)
 	UpdateProtectionStatusByIDAndUserID(ctx context.Context, id string, userID string, protectionStatus string) (*domain.PCAgent, error)
 	DeleteByIDAndUserID(ctx context.Context, id string, userID string) error
 	Save(ctx context.Context, agent *domain.PCAgent) error

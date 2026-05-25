@@ -12,7 +12,6 @@ import (
 	"datn-backend/internal/domain"
 	"datn-backend/internal/repo"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -56,14 +55,10 @@ type PairingStatusResult struct {
 }
 
 func (uc *PairingUseCase) StartPairing(ctx context.Context, input domain.StartPCAgentPairingInput) (*domain.PairingSession, error) {
-	pcAgentID := strings.TrimSpace(input.PCAgentID)
 	deviceName := strings.TrimSpace(input.DeviceName)
 	osType := strings.TrimSpace(strings.ToLower(input.OSType))
 
-	if pcAgentID == "" || deviceName == "" || osType == "" {
-		return nil, ErrInvalidInput
-	}
-	if _, err := uuid.Parse(pcAgentID); err != nil {
+	if deviceName == "" || osType == "" {
 		return nil, ErrInvalidInput
 	}
 
@@ -82,12 +77,11 @@ func (uc *PairingUseCase) StartPairing(ctx context.Context, input domain.StartPC
 		}
 
 		session, err := uc.pairingSessions.Create(ctx, domain.PairingSession{
-			DeviceCode:         deviceCode,
-			RequestedPCAgentID: &pcAgentID,
-			DeviceName:         deviceName,
-			OSType:             osType,
-			Status:             domain.PairingStatusPending,
-			ExpiresAt:          time.Now().UTC().Add(pairingSessionTTL),
+			DeviceCode: deviceCode,
+			DeviceName: deviceName,
+			OSType:     osType,
+			Status:     domain.PairingStatusPending,
+			ExpiresAt:  time.Now().UTC().Add(pairingSessionTTL),
 		})
 		if errors.Is(err, repo.ErrPairingSessionCodeExists) {
 			continue

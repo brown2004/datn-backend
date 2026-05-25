@@ -19,14 +19,9 @@ func NewPairingSessionRepository(db *sql.DB) *PairingSessionRepository {
 }
 
 func (r *PairingSessionRepository) Create(ctx context.Context, session domain.PairingSession) (*domain.PairingSession, error) {
-	requestedPCAgentID := sql.NullString{}
-	if session.RequestedPCAgentID != nil && *session.RequestedPCAgentID != "" {
-		requestedPCAgentID = sql.NullString{String: *session.RequestedPCAgentID, Valid: true}
-	}
-
 	const query = `
 		INSERT INTO pairing_sessions (device_code, requested_pc_agent_id, device_name, os_type, status, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, gen_random_uuid(), $2, $3, $4, $5)
 		RETURNING id, device_code, requested_pc_agent_id, device_name, os_type, status, expires_at,
 			confirmed_by_user_id, pc_agent_id, confirmed_at, created_at
 	`
@@ -35,7 +30,6 @@ func (r *PairingSessionRepository) Create(ctx context.Context, session domain.Pa
 		ctx,
 		query,
 		session.DeviceCode,
-		requestedPCAgentID,
 		session.DeviceName,
 		session.OSType,
 		session.Status,
@@ -149,7 +143,7 @@ func (r *PairingSessionRepository) Confirm(ctx context.Context, deviceCode strin
 		return nil, expired, repo.ErrPairingSessionExpired
 	}
 	if session.RequestedPCAgentID == nil || *session.RequestedPCAgentID == "" {
-		return nil, nil, errors.New("pairing session missing requested pc agent id")
+		return nil, nil, errors.New("pairing session missing pc agent id")
 	}
 
 	agent, err := scanPCAgent(tx.QueryRowContext(
@@ -157,14 +151,6 @@ func (r *PairingSessionRepository) Confirm(ctx context.Context, deviceCode strin
 		`
 			INSERT INTO pc_agents (id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status)
 			VALUES ($1, $2, $3, $4, NULL, $5, $6)
-			ON CONFLICT (id) DO UPDATE
-			SET user_id = EXCLUDED.user_id,
-				device_name = EXCLUDED.device_name,
-				os_type = EXCLUDED.os_type,
-				agent_secret_hash = NULL,
-				agent_status = EXCLUDED.agent_status,
-				protection_status = EXCLUDED.protection_status,
-				last_seen_at = NULL
 			RETURNING id, user_id, device_name, os_type, agent_secret_hash, agent_status, protection_status, last_seen_at, created_at
 		`,
 		*session.RequestedPCAgentID,

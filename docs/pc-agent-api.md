@@ -14,7 +14,7 @@ PC-agent không dùng JWT user. PC-agent chỉ dùng:
 ## Luồng Chính
 
 1. Agent chưa có config local thì gọi `POST /api/pc-agents/pairing/start`.
-2. Agent hiển thị `device_code` cho user.
+2. Backend tạo `pc_agent_id`; agent lưu local `pc_agent_id` và hiển thị `device_code` cho user.
 3. Agent poll `GET /api/pc-agents/pairing/status`.
 4. Khi status `confirmed`, backend trả `pc_agent_id + agent_secret` đúng lần đầu.
 5. Agent lưu local `pc_agent_id + agent_secret`.
@@ -40,6 +40,7 @@ Success `201`:
 
 ```json
 {
+  "pc_agent_id": "8e4d44b1-1e1c-4a2f-a339-ec1c4d5f22e2",
   "pairing_session_id": "7e6f6c83-19ad-4ca2-a7d4-9d84c1c3d2ab",
   "device_code": "A7K9Q2",
   "expires_in": 600
@@ -50,6 +51,7 @@ Agent cần lưu tạm:
 
 ```json
 {
+  "pc_agent_id": "...",
   "pairing_session_id": "...",
   "device_code": "..."
 }
@@ -57,7 +59,9 @@ Agent cần lưu tạm:
 
 Lưu ý:
 
-- API này không tạo `pc_agents`.
+- API này cấp trước `pc_agent_id` bằng `pairing_sessions.requested_pc_agent_id`; `pc_agents` chỉ được tạo khi user confirm để luôn có `user_id`.
+- `requested_pc_agent_id` được đảm bảo unique bằng unique index trong database.
+- `device_name` và `os_type` chỉ là metadata, không dùng làm định danh chính.
 - `expires_in` là số giây còn lại, hiện tại khoảng `600`.
 
 ## 2. Check Pairing Status

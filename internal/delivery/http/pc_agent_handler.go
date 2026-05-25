@@ -19,7 +19,6 @@ func NewPCAgentHandler(pairing *usecase.PairingUseCase) *PCAgentHandler {
 
 func (h *PCAgentHandler) HandleStartPairing(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PCAgentID  string `json:"pc_agent_id"`
 		DeviceName string `json:"device_name"`
 		OSType     string `json:"os_type"`
 	}
@@ -28,7 +27,6 @@ func (h *PCAgentHandler) HandleStartPairing(w http.ResponseWriter, r *http.Reque
 	}
 
 	session, err := h.pairing.StartPairing(r.Context(), domain.StartPCAgentPairingInput{
-		PCAgentID:  req.PCAgentID,
 		DeviceName: req.DeviceName,
 		OSType:     req.OSType,
 	})
@@ -41,12 +39,18 @@ func (h *PCAgentHandler) HandleStartPairing(w http.ResponseWriter, r *http.Reque
 		}
 		return
 	}
+	if session.RequestedPCAgentID == nil || *session.RequestedPCAgentID == "" {
+		writeInternalError(w, errors.New("pairing session missing pc agent id"))
+		return
+	}
 
 	writeJSON(w, http.StatusCreated, struct {
+		PCAgentID        string `json:"pc_agent_id"`
 		PairingSessionID string `json:"pairing_session_id"`
 		DeviceCode       string `json:"device_code"`
 		ExpiresIn        int64  `json:"expires_in"`
 	}{
+		PCAgentID:        *session.RequestedPCAgentID,
 		PairingSessionID: session.ID,
 		DeviceCode:       session.DeviceCode,
 		ExpiresIn:        secondsUntil(session.ExpiresAt),

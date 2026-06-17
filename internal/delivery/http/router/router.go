@@ -11,6 +11,7 @@ func NewRouter(
 	authHandler *deliveryhttp.AuthHandler,
 	pcAgentHandler *deliveryhttp.PCAgentHandler,
 	mobileDeviceHandler *deliveryhttp.MobileDeviceHandler,
+	alertHandler *deliveryhttp.AlertHandler,
 	tokenService *token.Service,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -24,6 +25,7 @@ func NewRouter(
 	registerAuthRoutes(mux, authHandler, tokenService)
 	registerPCAgentRoutes(mux, pcAgentHandler, tokenService)
 	registerMobileDeviceRoutes(mux, mobileDeviceHandler, tokenService)
+	registerAlertRoutes(mux, alertHandler, tokenService)
 
 	return mux
 }
@@ -52,4 +54,8 @@ func registerPCAgentRoutes(mux *http.ServeMux, handler *deliveryhttp.PCAgentHand
 
 func registerMobileDeviceRoutes(mux *http.ServeMux, handler *deliveryhttp.MobileDeviceHandler, tokenService *token.Service) {
 	mux.Handle("POST /api/mobile-devices", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleRegister)))
+}
+
+func registerAlertRoutes(mux *http.ServeMux, handler *deliveryhttp.AlertHandler, tokenService *token.Service) {
+	mux.Handle("GET /api/alerts", deliveryhttp.RequireAuth(tokenService, http.HandlerFunc(handler.HandleList)))
 }

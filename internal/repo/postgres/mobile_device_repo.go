@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"datn-backend/internal/domain"
 )
@@ -46,7 +47,13 @@ func (r *MobileDeviceRepository) FindByUserID(ctx context.Context, userID string
 }
 
 func (r *MobileDeviceRepository) Upsert(ctx context.Context, device domain.MobileDevice) (*domain.MobileDevice, error) {
-	const query = `
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	const upsertQuery = `
 		INSERT INTO mobile_devices (user_id, fcm_token, platform)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (fcm_token)
@@ -55,7 +62,39 @@ func (r *MobileDeviceRepository) Upsert(ctx context.Context, device domain.Mobil
 		RETURNING id, user_id, fcm_token, platform
 	`
 
-	return scanMobileDevice(r.db.QueryRowContext(ctx, query, device.UserID, device.FCMToken, device.Platform))
+	savedDevice, err := scanMobileDevice(tx.QueryRowContext(ctx, upsertQuery, device.UserID, device.FCMToken, device.Platform))
+	if err != nil {
+		return nil, err
+	}
+	if savedDevice == nil {
+		return nil, fmt.Errorf("mobile device upsert returned no row")
+	}
+
+	const cleanupQuery = `
+		DELETE FROM mobile_devices
+		WHERE user_id = $1
+		  AND platform = $2
+		  AND fcm_token <> $3
+	`
+	if _, err := tx.ExecContext(ctx, cleanupQuery, savedDevice.UserID, savedDevice.Platform, savedDevice.FCMToken); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return savedDevice, nil
+}
+
+func (r *MobileDeviceRepository) DeleteByFCMToken(ctx context.Context, fcmToken string) error {
+	const query = `
+		DELETE FROM mobile_devices
+		WHERE fcm_token = $1
+	`
+
+	_, err := r.db.ExecContext(ctx, query, fcmToken)
+	return err
 }
 
 func (r *MobileDeviceRepository) Save(ctx context.Context, device *domain.MobileDevice) error {

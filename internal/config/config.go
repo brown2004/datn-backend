@@ -7,9 +7,16 @@ import (
 
 // Config stores application configuration.
 type Config struct {
-	AppPort     string
-	DatabaseURL string
-	AppEnv      string
+	AppPort               string
+	DatabaseURL           string
+	AppEnv                string
+	MQTTBroker            string
+	MQTTClientID          string
+	MQTTUsername          string
+	MQTTPassword          string
+	MQTTAlertTopic        string
+	FCMServiceAccountFile string
+	FCMProjectID          string
 	// jwt options
 	JWTSecret       string
 	JWTIssuer       string
@@ -34,6 +41,16 @@ func Load() Config {
 		appEnv = "development"
 	}
 
+	mqttAlertTopic := os.Getenv("MQTT_ALERT_TOPIC")
+	if mqttAlertTopic == "" {
+		mqttAlertTopic = "pcapp/alert/+"
+	}
+
+	fcmServiceAccountFile := os.Getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
+	if fcmServiceAccountFile == "" {
+		fcmServiceAccountFile = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	}
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "dev-only-change-this-jwt-secret"
@@ -50,14 +67,21 @@ func Load() Config {
 	}
 
 	return Config{
-		AppPort:         appPort,
-		DatabaseURL:     databaseURL,
-		AppEnv:          appEnv,
-		JWTSecret:       jwtSecret,
-		JWTIssuer:       jwtIssuer,
-		JWTAudience:     jwtAudience,
-		AccessTokenTTL:  durationFromEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL: durationFromEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
+		AppPort:               appPort,
+		DatabaseURL:           databaseURL,
+		AppEnv:                appEnv,
+		MQTTBroker:            os.Getenv("MQTT_BROKER"),
+		MQTTClientID:          os.Getenv("MQTT_CLIENT_ID"),
+		MQTTUsername:          os.Getenv("MQTT_USERNAME"),
+		MQTTPassword:          os.Getenv("MQTT_PASSWORD"),
+		MQTTAlertTopic:        mqttAlertTopic,
+		FCMServiceAccountFile: fcmServiceAccountFile,
+		FCMProjectID:          os.Getenv("FCM_PROJECT_ID"),
+		JWTSecret:             jwtSecret,
+		JWTIssuer:             jwtIssuer,
+		JWTAudience:           jwtAudience,
+		AccessTokenTTL:        durationFromEnv("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:       durationFromEnv("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 	}
 }
 

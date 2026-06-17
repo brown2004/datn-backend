@@ -10,6 +10,7 @@ const (
 type Alert struct {
 	ID        string
 	AgentID   string
+	AgentName string
 	UserID    string
 	Type      string
 	Message   string

@@ -59,4 +59,6 @@
 
 ## Alerts
 
-No HTTP alert routes are registered yet.
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/alerts` | JWT | List current user's alert history |

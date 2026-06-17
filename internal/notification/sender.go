@@ -7,5 +7,17 @@ import (
 )
 
 type Sender interface {
-	SendAlert(ctx context.Context, alert domain.Alert) error
+	SendAlert(ctx context.Context, alert domain.Alert, devices []domain.MobileDevice) (SendReport, error)
+}
+
+type SendReport struct {
+	Targeted int
+	Sent     int
+	Failed   []SendFailure
+}
+
+type SendFailure struct {
+	Token        string
+	Err          error
+	InvalidToken bool
 }

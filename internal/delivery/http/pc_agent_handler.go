@@ -1,7 +1,9 @@
 package http
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -10,11 +12,20 @@ import (
 )
 
 type PCAgentHandler struct {
-	pairing *usecase.PairingUseCase
+	pairing            *usecase.PairingUseCase
+	protectionCommands ProtectionCommandPublisher
 }
 
-func NewPCAgentHandler(pairing *usecase.PairingUseCase) *PCAgentHandler {
-	return &PCAgentHandler{pairing: pairing}
+type ProtectionCommandPublisher interface {
+	PublishProtectionCommand(ctx context.Context, pcAgentID string, enabled bool) error
+}
+
+func NewPCAgentHandler(pairing *usecase.PairingUseCase, protectionCommands ...ProtectionCommandPublisher) *PCAgentHandler {
+	handler := &PCAgentHandler{pairing: pairing}
+	if len(protectionCommands) > 0 {
+		handler.protectionCommands = protectionCommands[0]
+	}
+	return handler
 }
 
 func (h *PCAgentHandler) HandleStartPairing(w http.ResponseWriter, r *http.Request) {
@@ -250,6 +261,7 @@ func (h *PCAgentHandler) HandleUpdateProtection(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	h.publishProtectionCommand(r.Context(), agent.ID, req.Enabled)
 	writeJSON(w, http.StatusOK, toPCAgentResponse(agent))
 }
 
@@ -279,6 +291,21 @@ func (h *PCAgentHandler) HandleUpdateOwnProtection(w http.ResponseWriter, r *htt
 	}
 
 	writeJSON(w, http.StatusOK, toPCAgentResponse(agent))
+}
+
+func (h *PCAgentHandler) publishProtectionCommand(_ context.Context, pcAgentID string, enabled bool) {
+	if h.protectionCommands == nil {
+		return
+	}
+
+	go func() {
+		publishCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		if err := h.protectionCommands.PublishProtectionCommand(publishCtx, pcAgentID, enabled); err != nil {
+			log.Printf("publish protection command failed pc_agent_id=%s enabled=%t: %v", pcAgentID, enabled, err)
+		}
+	}()
 }
 
 func toPCAgentResponse(agent *domain.PCAgent) any {

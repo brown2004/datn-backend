@@ -90,10 +90,11 @@ func (uc *AlertUseCase) CreateAlertFromAgent(ctx context.Context, input CreateAl
 	if err != nil {
 		return nil, err
 	}
-	if len(devices) == 0 {
+	if len(devices) == 0 { // khong co user nao lien ket voi thiet bi nay
 		log.Printf("alert notification skipped: no mobile devices user_id=%s alert_id=%s", agent.UserID, alert.ID)
 		return alert, nil
 	}
+
 	if len(devices) > 0 && uc.notifications != nil {
 		report, err := uc.notifications.SendAlert(ctx, *alert, devices)
 		invalidTokensRemoved, nonInvalidFailures := uc.cleanupInvalidNotificationTokens(ctx, agent.UserID, report.Failed)

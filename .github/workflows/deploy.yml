@@ -1,0 +1,36 @@
+name: Deploy DATN Server
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: datn-server-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - datn-vps
+
+    steps:
+      - name: Checkout latest code
+        uses: actions/checkout@v4
+
+      - name: Prepare production env files
+        run: |
+          cp /opt/datn-secrets/.env ./.env
+
+          rm -rf ./firebase
+          mkdir -p ./firebase
+          cp /opt/datn-secrets/firebase/firebase-service-account.json ./firebase/firebase-service-account.json
+
+      - name: Build and restart services
+        run: |
+          docker compose up -d --build --remove-orphans
+
+      - name: Show containers
+        run: |
+          docker compose ps

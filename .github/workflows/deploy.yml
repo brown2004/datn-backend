@@ -21,11 +21,11 @@ jobs:
 
       - name: Prepare production env files
         run: |
-          cp /opt/datn-secrets/.env ./.env
+          cp /opt/datn-secret/.env ./.env
 
           rm -rf ./firebase
           mkdir -p ./firebase
-          cp /opt/datn-secrets/firebase/firebase-service-account.json ./firebase/firebase-service-account.json
+          cp /opt/datn-secret/firebase/firebase-service-account.json ./firebase/firebase-service-account.json
 
       - name: Build and restart services
         run: |

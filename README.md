@@ -114,7 +114,6 @@ Authorization: Bearer <access_token>
 ## Environment Variables
 
 - `APP_PORT`: cong HTTP, mac dinh `8080`.
-- `APP_ENV`: moi truong chay, mac dinh `development`. Khi khac `production`, API request OTP tra ve `dev_otp`.
 - `DATABASE_URL`: PostgreSQL connection string, mac dinh `postgres://postgres:postgres@localhost:5433/datn?sslmode=disable`.
 - `JWT_SECRET`: secret ky JWT. Can doi khi chay production.
 - `JWT_ISSUER`: issuer cua access token, mac dinh `datn-backend`.

@@ -55,7 +55,6 @@ func main() {
 	tokenService := token.NewService(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL)
 	notificationSender := newNotificationSender(cfg)
 	authUseCase := usecase.NewAuthUseCase(userRepo, authOTPRepo, refreshTokenRepo, registrationRepo, usecase.AuthOptions{
-		ExposeDevOTP:    cfg.AppEnv != "production",
 		TokenService:    tokenService,
 		RefreshTokenTTL: cfg.RefreshTokenTTL,
 	})

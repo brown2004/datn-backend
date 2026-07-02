@@ -45,12 +45,10 @@ type AuthUseCase struct {
 	refreshTokens   repo.RefreshTokenRepository
 	registrations   repo.RegistrationRepository
 	tokens          *token.Service
-	exposeDevOTP    bool
 	refreshTokenTTL time.Duration
 }
 
 type AuthOptions struct {
-	ExposeDevOTP    bool
 	TokenService    *token.Service
 	RefreshTokenTTL time.Duration
 }
@@ -67,7 +65,6 @@ func NewAuthUseCase(users repo.UserRepository, otps repo.AuthOTPRepository, refr
 		refreshTokens:   refreshTokens,
 		registrations:   registrations,
 		tokens:          options.TokenService,
-		exposeDevOTP:    options.ExposeDevOTP,
 		refreshTokenTTL: refreshTokenTTL,
 	}
 }
@@ -110,9 +107,7 @@ func (uc *AuthUseCase) RequestRegisterOTP(ctx context.Context, input domain.Requ
 
 	output := &domain.RegisterOTPChallenge{
 		ExpiresAt: otp.ExpiresAt,
-	}
-	if uc.exposeDevOTP {
-		output.DevOTP = &otpCode
+		DevOTP:    &otpCode,
 	}
 
 	return output, nil

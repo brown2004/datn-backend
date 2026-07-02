@@ -9,7 +9,6 @@ import (
 type Config struct {
 	AppPort               string
 	DatabaseURL           string
-	AppEnv                string
 	MQTTBroker            string
 	MQTTClientID          string
 	MQTTUsername          string
@@ -34,11 +33,6 @@ func Load() Config {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		databaseURL = "postgres://postgres:postgres@localhost:5433/datn?sslmode=disable"
-	}
-
-	appEnv := os.Getenv("APP_ENV")
-	if appEnv == "" {
-		appEnv = "development"
 	}
 
 	mqttAlertTopic := os.Getenv("MQTT_ALERT_TOPIC")
@@ -69,7 +63,6 @@ func Load() Config {
 	return Config{
 		AppPort:               appPort,
 		DatabaseURL:           databaseURL,
-		AppEnv:                appEnv,
 		MQTTBroker:            os.Getenv("MQTT_BROKER"),
 		MQTTClientID:          os.Getenv("MQTT_CLIENT_ID"),
 		MQTTUsername:          os.Getenv("MQTT_USERNAME"),

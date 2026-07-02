@@ -27,9 +27,26 @@ jobs:
           mkdir -p ./firebase
           cp /opt/datn-secret/firebase/firebase-service-account.json ./firebase/firebase-service-account.json
 
-      - name: Build and restart services
+      - name: Start database and mqtt first
         run: |
-          docker compose up -d --build --remove-orphans
+          docker compose up -d postgres emqx
+
+      - name: Setup Go for goose
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install goose
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Run database migrations
+        run: |
+          ~/go/bin/goose -dir internal/database/migrations postgres "postgres://postgres:postgres@127.0.0.1:5433/datn?sslmode=disable" up
+
+      - name: Build and restart backend
+        run: |
+          docker compose up -d --build backend --remove-orphans
 
       - name: Show containers
         run: |

@@ -14,6 +14,7 @@ type Config struct {
 	MQTTUsername          string
 	MQTTPassword          string
 	MQTTAlertTopic        string
+	MQTTStatusTopic       string
 	FCMServiceAccountFile string
 	FCMProjectID          string
 	// jwt options
@@ -38,6 +39,11 @@ func Load() Config {
 	mqttAlertTopic := os.Getenv("MQTT_ALERT_TOPIC")
 	if mqttAlertTopic == "" {
 		mqttAlertTopic = "pcapp/alert/+"
+	}
+
+	mqttStatusTopic := os.Getenv("MQTT_STATUS_TOPIC")
+	if mqttStatusTopic == "" {
+		mqttStatusTopic = "pcapp/status/+"
 	}
 
 	fcmServiceAccountFile := os.Getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
@@ -68,6 +74,7 @@ func Load() Config {
 		MQTTUsername:          os.Getenv("MQTT_USERNAME"),
 		MQTTPassword:          os.Getenv("MQTT_PASSWORD"),
 		MQTTAlertTopic:        mqttAlertTopic,
+		MQTTStatusTopic:       mqttStatusTopic,
 		FCMServiceAccountFile: fcmServiceAccountFile,
 		FCMProjectID:          os.Getenv("FCM_PROJECT_ID"),
 		JWTSecret:             jwtSecret,

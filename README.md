@@ -120,6 +120,9 @@ Authorization: Bearer <access_token>
 - `JWT_AUDIENCE`: audience cua access token, mac dinh `datn-api`.
 - `ACCESS_TOKEN_TTL`: thoi gian song access token theo dinh dang Go duration, mac dinh `15m`.
 - `REFRESH_TOKEN_TTL`: thoi gian song refresh token theo dinh dang Go duration, mac dinh `720h`.
+- `MQTT_BROKER`: MQTT broker backend subscribe alert. Khi chay Docker Compose dung `tcp://emqx:1883`; PC agent ben ngoai VPS publish toi `tcp://20.243.82.200:1883`.
+- `MQTT_ALERT_TOPIC`: topic backend subscribe alert, mac dinh `pcapp/alert/+`.
+- `MQTT_STATUS_TOPIC`: topic backend subscribe PC Agent status/LWT, mac dinh `pcapp/status/+`.
 
 ## Chay Local
 

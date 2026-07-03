@@ -109,6 +109,8 @@ func alertMessage(alertType string) string {
 	switch alertType {
 	case domain.AlertTypeMotionDetected:
 		return "Phát hiện rung lắc hoặc di chuyển bất thường."
+	case domain.AlertTypePCAgentDisconnected:
+		return "PC Agent mat ket noi dot ngot."
 	case domain.AlertTypeUSBRemoved:
 		return "Thiết bị bảo vệ đã bị ngắt kết nối."
 	default:

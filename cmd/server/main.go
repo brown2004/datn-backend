@@ -17,6 +17,7 @@ import (
 	"datn-backend/internal/database"
 	deliveryhttp "datn-backend/internal/delivery/http"
 	httprouter "datn-backend/internal/delivery/http/router"
+	"datn-backend/internal/domain"
 	backendmqtt "datn-backend/internal/mqtt"
 	"datn-backend/internal/notification"
 	postgresrepo "datn-backend/internal/repo/postgres"
@@ -137,26 +138,47 @@ func newProtectionCommandPublisher(cfg config.Config) *backendmqtt.ProtectionCom
 
 func startMQTTSubscriber(ctx context.Context, cfg config.Config, alertUseCase *usecase.AlertUseCase) {
 	if strings.TrimSpace(cfg.MQTTBroker) == "" {
-		log.Println("MQTT_BROKER is empty; mqtt alert subscriber disabled")
+		log.Println("MQTT_BROKER is empty; mqtt subscribers disabled")
 		return
 	}
 
+	startMQTTTopicSubscriber(ctx, cfg, "alert", cfg.MQTTAlertTopic, func(ctx context.Context, message backendmqtt.Message) error {
+		return handleMQTTAlert(ctx, alertUseCase, message)
+	})
+	startMQTTTopicSubscriber(ctx, cfg, "status", cfg.MQTTStatusTopic, func(ctx context.Context, message backendmqtt.Message) error {
+		return handleMQTTStatus(ctx, alertUseCase, message)
+	})
+}
+
+func startMQTTTopicSubscriber(ctx context.Context, cfg config.Config, name string, topic string, handler backendmqtt.Handler) {
+	if strings.TrimSpace(topic) == "" {
+		log.Printf("mqtt %s subscriber disabled: topic is empty", name)
+		return
+	}
+
+	log.Printf("mqtt %s subscriber starting broker=%s topic=%s", name, cfg.MQTTBroker, topic)
 	subscriber := &backendmqtt.Subscriber{
 		Broker:      cfg.MQTTBroker,
-		ClientID:    cfg.MQTTClientID,
+		ClientID:    mqttSubscriberClientID(cfg.MQTTClientID, name),
 		Username:    cfg.MQTTUsername,
 		Password:    cfg.MQTTPassword,
-		TopicFilter: cfg.MQTTAlertTopic,
+		TopicFilter: topic,
 	}
 
 	go func() {
-		err := subscriber.Run(ctx, func(ctx context.Context, message backendmqtt.Message) error {
-			return handleMQTTAlert(ctx, alertUseCase, message)
-		})
-		if err != nil {
-			log.Printf("mqtt subscriber stopped: %v", err)
+		if err := subscriber.Run(ctx, handler); err != nil {
+			log.Printf("mqtt %s subscriber stopped: %v", name, err)
 		}
 	}()
+}
+
+func mqttSubscriberClientID(base string, suffix string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+
+	return base + "-" + suffix
 }
 
 type mqttAlertPayload struct {
@@ -165,6 +187,13 @@ type mqttAlertPayload struct {
 	AlertType string    `json:"alert_type"`
 	EventType string    `json:"event_type"`
 	Message   string    `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type mqttStatusPayload struct {
+	PCAgentID string    `json:"pc_agent_id"`
+	Status    string    `json:"status"`
+	Reason    string    `json:"reason"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -195,6 +224,37 @@ func handleMQTTAlert(ctx context.Context, alertUseCase *usecase.AlertUseCase, me
 	}
 
 	log.Printf("alert accepted: id=%s pc_agent_id=%s type=%s", alert.ID, alert.AgentID, alert.Type)
+	return nil
+}
+
+func handleMQTTStatus(ctx context.Context, alertUseCase *usecase.AlertUseCase, message backendmqtt.Message) error {
+	var payload mqttStatusPayload
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		return err
+	}
+
+	status := strings.TrimSpace(strings.ToLower(payload.Status))
+	reason := strings.TrimSpace(strings.ToLower(payload.Reason))
+	if status != "inactive" || reason != "unexpected_disconnect" {
+		return nil
+	}
+
+	pcAgentID := strings.TrimSpace(payload.PCAgentID)
+	if pcAgentID == "" {
+		pcAgentID = topicTail(message.Topic)
+	}
+
+	alert, err := alertUseCase.CreateAlertFromAgent(ctx, usecase.CreateAlertFromAgentInput{
+		PCAgentID:   pcAgentID,
+		AlertType:   domain.AlertTypePCAgentDisconnected,
+		Message:     "PC Agent mat ket noi dot ngot.",
+		TriggeredAt: payload.Timestamp,
+	})
+	if err != nil {
+		return err
+	}
+
+	log.Printf("pc agent disconnect alert accepted: id=%s pc_agent_id=%s reason=%s", alert.ID, alert.AgentID, reason)
 	return nil
 }
 

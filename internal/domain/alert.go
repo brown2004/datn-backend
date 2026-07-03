@@ -3,8 +3,9 @@ package domain
 import "time"
 
 const (
-	AlertTypeUSBRemoved     = "usb_removed"
-	AlertTypeMotionDetected = "motion_detected"
+	AlertTypeUSBRemoved          = "usb_removed"
+	AlertTypeMotionDetected      = "motion_detected"
+	AlertTypePCAgentDisconnected = "pc_agent_disconnected"
 )
 
 type Alert struct {

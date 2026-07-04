@@ -108,10 +108,12 @@ func (s *FCMSender) SendAlert(ctx context.Context, alert domain.Alert, devices [
 }
 
 func (s *FCMSender) sendToToken(ctx context.Context, accessToken string, projectID string, alert domain.Alert, token string) error {
-	title := "Laptop Guard cảnh báo"
+	title := domain.AlertTitle(alert.Type)
 	body := strings.TrimSpace(alert.Message)
-	if body == "" {
-		body = "Phát hiện sự kiện bất thường trên thiết bị của bạn."
+	if domain.IsKnownAlertType(alert.Type) {
+		body = domain.AlertMessage(alert.Type)
+	} else if body == "" {
+		body = domain.AlertMessage(alert.Type)
 	}
 
 	payload := map[string]any{

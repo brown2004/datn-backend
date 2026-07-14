@@ -16,20 +16,20 @@ jobs:
       - datn-vps2
 
     steps:
-      - name: Fix runner workspace permissions
-        run: |
-          sudo chown -R azureuser:azureuser /home/azureuser/actions-runner/_work || true
+      # - name: Fix runner workspace permissions
+      #   run: |
+      #     sudo chown -R azureuser:azureuser /home/azureuser/actions-runner/_work || true
 
       - name: Checkout latest code
         uses: actions/checkout@v4
 
       - name: Prepare production env files
         run: |
-          cp /opt/datn-secret/.env ./.env
+          cp /opt/datn-secrets/.env ./.env
 
           rm -rf ./firebase
           mkdir -p ./firebase
-          cp /opt/datn-secret/firebase/firebase-service-account.json ./firebase/firebase-service-account.json
+          cp /opt/datn-secrets/firebase/firebase-service-account.json ./firebase/firebase-service-account.json
 
       - name: Start database and mqtt first
         run: |

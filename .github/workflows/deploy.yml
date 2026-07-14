@@ -16,9 +16,9 @@ jobs:
       - datn-vps3
 
     steps:
-      # - name: Fix runner workspace permissions
-      #   run: |
-      #     sudo chown -R azureuser:azureuser /home/azureuser/actions-runner/_work || true
+      - name: Fix runner workspace permissions
+        run: |
+          sudo chown -R github-runner:github-runner /home/github-runner/actions-runner/_work || true
 
       - name: Checkout latest code
         uses: actions/checkout@v4

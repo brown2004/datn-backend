@@ -13,7 +13,7 @@ jobs:
   deploy:
     runs-on:
       - self-hosted
-      - datn-vps
+      - datn-vps2
 
     steps:
       - name: Fix runner workspace permissions

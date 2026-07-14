@@ -1,5 +1,5 @@
 package main
-
+// hihi
 // goose:
 // goose -dir internal/database/migrations postgres "postgres://postgres:postgres@localhost:5433/datn?sslmode=disable" up
 import (

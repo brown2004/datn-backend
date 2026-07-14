@@ -20,6 +20,7 @@ jobs:
       #   run: |
       #     sudo chown -R azureuser:azureuser /home/azureuser/actions-runner/_work || true
 
+
       - name: Checkout latest code
         uses: actions/checkout@v4
 

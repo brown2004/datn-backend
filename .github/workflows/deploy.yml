@@ -20,7 +20,6 @@ jobs:
       #   run: |
       #     sudo chown -R azureuser:azureuser /home/azureuser/actions-runner/_work || true
 
-
       - name: Checkout latest code
         uses: actions/checkout@v4
 
@@ -47,7 +46,7 @@ jobs:
 
       - name: Run database migrations
         run: |
-          ~/go/bin/goose -dir internal/database/migrations postgres "postgres://postgres:postgres@127.0.0.1:5432/datn?sslmode=disable" up
+          ~/go/bin/goose -dir internal/database/migrations postgres "postgres://postgres:postgres@127.0.0.1:5433/datn?sslmode=disable" up
 
       - name: Build and restart backend
         run: |
